@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Best Scores List</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <h1>Best Scores List</h1>
+    <ul id="score-list"></ul>
+    <input type="file" id="file-input" accept="application/json">
+    <h2>設計師統計</h2>
+    <canvas id="designer-chart"></canvas>
+
+    <script>
+        let songdata = [];
+
+        function calculateValue(acc_input, con_input) {
+            const rk = [[0, 0], [10, 1.6], [20, 3.2], [30, 4.8], [40, 6.4], [50, 8.0], [60, 9.6], [70, 11.2], [75, 12.0], [80, 12.8], [90, 13.6], [94, 16.8], [97, 20.0], [98, 20.3], [99, 20.8], [99.5, 21.1], [100, 21.6], [100.5, 22.4], [101, 22.4]];
+
+            let use_const = 0;
+            // Find the appropriate constant based on acc_input
+            for (let i = 0; i < rk.length - 1; i++) {
+                if (acc_input >= rk[i][0] && acc_input < rk[i + 1][0]) {
+                    use_const = rk[i][1];
+                    console.log('input_u:' + use_const);
+                    console.log('input_c:' + con_input);
+                }
+            }
+
+            // Calculate cal_acc based on acc_input
+            let cal_acc = acc_input >= 100.5 ? 100.5 : acc_input;
+
+            // Returning the desired value
+            return Math.floor(use_const * (acc_input/100) * con_input);  // If you need to return something else, modify this return value accordingly
+        }
+
+
+        async function FetchSongData() {
+            try {
+                const response = await fetch("https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json");
+                songdata = await response.json();
+                console.log('歌曲資料已載入:', songdata);
+            } catch (error) {
+                console.error('無法載入歌曲資料:', error);
+            }
+        }
+
+        function FindDesigner(title, difficultyIndex) {
+            if (!songdata.songs || songdata.songs.length === 0) {
+                console.warn('歌曲資料尚未載入');
+                return "未知設計師";
+            }
+
+            for (let element of songdata.songs) {
+                if (element.title === title) {
+                    let sheet = element.sheets[difficultyIndex];
+                    return sheet?.noteDesigner || "未知設計師";
+                }
+            }
+            return "未知設計師";
+        }
+
+        const DifficultyName = ["Basic", "Advanced", "Expert", "Master", "Re:MASTER"];
+
+        const DifficultyColor = {
+            "Basic": "Green",
+            "Advanced": "Yellow",
+            "Expert": "Red",
+            "Master": "Purple",
+            "Re:MASTER": "Fuchsia"
+        };
+
+        FetchSongData();
+
+        document.getElementById('file-input').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (file) {
+                const InputReader = new FileReader();
+                InputReader.onload = function (e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        const list = document.getElementById('score-list');
+                        list.innerHTML = ''; // 清空列表
+
+                        let designerCounts = {}; // 設計師計數
+
+                        if (Array.isArray(data)) {
+                            data.slice(0, 50).forEach(item => {
+                                const difficultyIndex = item.difficulty;
+                                const designer = FindDesigner(item.songName, difficultyIndex);
+
+                                // 計算設計師出現次數
+                                designerCounts[designer] = (designerCounts[designer] || 0) + 1;
+
+                                const li = document.createElement('li');
+                                li.textContent = `${item.songName} (${designer})`;
+                                li.style.color = DifficultyColor[DifficultyName[difficultyIndex]] || 'black';
+                                list.appendChild(li);
+                            });
+
+                            // 繪製長條圖
+                            RenderChart(designerCounts);
+                        } else {
+                            console.warn('JSON 資料中沒有 `best` 陣列');
+                        }
+                    } catch (error) {
+                        console.error('無法解析 JSON 檔案:', error);
+                    }
+                };
+                InputReader.readAsText(file);
+            }
+        });
+
+        function RenderChart(designerCounts) {
+            const ctx = document.getElementById('designer-chart').getContext('2d');
+            const sortedEntries = Object.entries(designerCounts).sort((a, b) => b[1] - a[1]);
+            const labels = sortedEntries.map(entry => entry[0]);
+            const data = sortedEntries.map(entry => entry[1]);
+
+            if (window.designerChart) {
+                window.designerChart.destroy();
+            }
+
+            window.designerChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '設計師出現次數',
+                        data: data,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
